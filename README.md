@@ -11,3 +11,4 @@ Create a conda virtual environment and activate it.
 conda env create -f environment.yml
 git clone https://github.com/xmuyulab/Pathmethy.git
 ```
+
