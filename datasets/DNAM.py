@@ -6,8 +6,6 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold
 
-from tutorials.mnist import train
-
 
 class ViTmodDataset(Dataset):
 

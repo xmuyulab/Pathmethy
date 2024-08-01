@@ -27,7 +27,7 @@ class ViTmod_subtype(nn.Module):
 
     for i in range(len(pathway_number)):
       self.mutil_linear_layers.append(nn.Sequential(
-          nn.LayerNorm(pathway_number[i] + 1),  
+          nn.LayerNorm(pathway_number[i] + 1),  #$ + 1 加的是额外的分类信息，对应的config里model_params要有categories参数！
           nn.Linear(pathway_number[i] + 1, dim),
           nn.LayerNorm(dim)
       ))
@@ -41,20 +41,20 @@ class ViTmod_subtype(nn.Module):
     )
     self.to_segment_num = pathway_number
 
-  def forward(self, genes):  
-    genes = genes.view(genes.shape[0], 1, -1)  
-    pathways = torch.split(genes, self.to_segment_num, dim=-1)  
+  def forward(self, genes):  # (N, 179242)
+    genes = genes.view(genes.shape[0], 1, -1)  # (N, 179242)->(N, 1, 179242)
+    pathways = torch.split(genes, self.to_segment_num, dim=-1)  # (N, 1, 179242)->tuple((N, 1, 252), ...)
     added_pathways = self.append_category(pathways)
 
     pathway_embedding_list = []
     for idx, layers in enumerate(self.mutil_linear_layers):
-      per_segment = layers(added_pathways[idx])  
+      per_segment = layers(added_pathways[idx])  # (N, 1, 252)->(N, 1, 128)
       pathway_embedding_list.append(per_segment)
 
     x = torch.cat(pathway_embedding_list, dim=-2)
-    b, n, _ = x.shape  
-    cls_token = repeat(self.cls_token, 'd -> b d', b=b)  
-    x, ps = pack([cls_token, x], 'b * d')  
+    b, n, _ = x.shape  # x.shape (N, 335, dim)
+    cls_token = repeat(self.cls_token, 'd -> b d', b=b)  # (N, dim)
+    x, ps = pack([cls_token, x], 'b * d')  # x(N,C,dim)->(N,C+1,dim)
     x = self.dropout(x)
     x = self.transformer(x)
     cls_token, _ = unpack(x, ps, 'b * d')
@@ -66,15 +66,15 @@ class ViTmod_subtype(nn.Module):
       raise ValueError("The number of segments and categories should be the same.")
 
     for pathway, category in zip(pathways, self.categories):
-      
+      # Convert the category to a tensor, ensuring the correct dtype and device
       category_tensor = torch.tensor([category], dtype=pathway.dtype, device=pathway.device)
 
-      
-      
-      
+      # Correctly unsqueeze the category_tensor to have 2 dimensions; originally it has 1 dimension
+      # You likely only need to unsqueeze once to match the pathway's dimensions for concatenation
+      # Assuming the pathway tensor is of shape [batch_size, 1, features], we want [batch_size, 1, 1] for the category_tensor
       category_tensor = category_tensor.expand(pathway.shape[0], 1, 1)
 
-      
+      # Concatenate the category tensor to the pathway tensor along the last dimension (features dimension)
       modified_pathway = torch.cat((pathway, category_tensor), dim=-1)
       added_pathways.append(modified_pathway)
 
@@ -103,7 +103,7 @@ class Attention(nn.Module):
     self.pathway_bias = None
     if pathway_bias is not None:
         self.pathway_bias = nn.Parameter(pathway_bias, requires_grad=False)
-    
+    # New: A linear layer for the initial pathway embedding transformation
     self.pathway_transform = nn.Linear(dim, dim)
 
 
